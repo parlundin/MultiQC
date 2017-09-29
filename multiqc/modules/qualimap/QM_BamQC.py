@@ -91,6 +91,30 @@ def parse_genome_results(self, f):
 
     # Get a nice sample name
     s_name = self.clean_s_name(d['bam_file'], f['root'])
+    self.qualimap_bamqc_cov_per_contig = dict()
+    autosomal_cov_length = 0
+    autosomal_cov_bases = 0
+    coverage_section = False
+    for line in f['f'].splitlines():
+        if line.startswith('>>>>>>> Coverage per contig'):
+            coverage_section = True
+            continue
+        if coverage_section:
+            line = line.strip()
+            if line:
+                sections = line.split()
+                if sections[0].startswith('chr'):
+                    sections[0] = sections[0][3:]
+                if sections[0].isdigit() and int(sections[0]) <= 22:
+                    autosomal_cov_length += float(sections[1])
+                    autosomal_cov_bases += float(sections[2])
+    
+    if autosomal_cov_length and autosomal_cov_bases:
+        coverage = autosomal_cov_bases / autosomal_cov_length
+    else:
+        coverage = 0.0
+    d['autosomal_coverage'] = float(coverage) 
+
 
     # Add to general stats table & calculate a nice % aligned
     try:
@@ -98,6 +122,7 @@ def parse_genome_results(self, f):
         self.general_stats_data[s_name]['mapped_reads'] = d['mapped_reads']
         d['percentage_aligned'] = (d['mapped_reads'] / d['total_reads'])*100
         self.general_stats_data[s_name]['percentage_aligned'] = d['percentage_aligned']
+        self.general_stats_data[s_name]['autosomal_coverage'] = d['autosomal_coverage']        
     except KeyError:
         pass
 
@@ -516,6 +541,14 @@ def general_stats_headers (self):
         'suffix': 'X',
         'scale': 'BuPu'
     }
+    self.general_stats_headers['autosomal_coverage'] = {
+        'title': 'Autosomal Coverage',
+        'description': 'Autosomal coverage',
+        'min': 0,
+        'suffix': 'X',
+        'scale': 'BuPu'
+    }
+
     self.general_stats_headers['percentage_aligned'] = {
         'title': '% Aligned',
         'description': '% mapped reads',
