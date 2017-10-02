@@ -23,7 +23,7 @@ def parse_reports(self):
         assert len(covs) > 0
         covs = [str(i) for i in covs]
         log.debug("Custom Qualimap thresholds: {}".format(", ".join([i for i in covs])))
-    except (AttributeError, TypeError, AssertionError):
+    except (AttributeError, TypeError, AssertionError, KeyError):
         covs = [1, 5, 10, 30, 50]
         covs = [str(i) for i in covs]
         log.debug("Using default Qualimap thresholds: {}".format(", ".join([i for i in covs])))
@@ -92,28 +92,27 @@ def parse_genome_results(self, f):
     # Get a nice sample name
     s_name = self.clean_s_name(d['bam_file'], f['root'])
     self.qualimap_bamqc_cov_per_contig = dict()
-    autosomal_cov_length = 0
-    autosomal_cov_bases = 0
-    coverage_section = False
-    for line in f['f'].splitlines():
-        if line.startswith('>>>>>>> Coverage per contig'):
-            coverage_section = True
-            continue
-        if coverage_section:
-            line = line.strip()
-            if line:
-                sections = line.split()
-                if sections[0].startswith('chr'):
-                    sections[0] = sections[0][3:]
-                if sections[0].isdigit() and int(sections[0]) <= 22:
-                    autosomal_cov_length += float(sections[1])
-                    autosomal_cov_bases += float(sections[2])
-    
-    if autosomal_cov_length and autosomal_cov_bases:
-        coverage = autosomal_cov_bases / autosomal_cov_length
-    else:
-        coverage = 0.0
-    d['autosomal_coverage'] = float(coverage) 
+    if 'valid_contigs' in config.qualimap_config:
+        autosomal_cov_length = 0
+        autosomal_cov_bases = 0
+        coverage_section = False
+        for line in f['f'].splitlines():
+            if line.startswith('>>>>>>> Coverage per contig'):
+                coverage_section = True
+                continue
+            if coverage_section:
+                line = line.strip()
+                if line:
+                    sections = line.split()
+                    if sections[0] in config.qualimap_config['valid_contigs']:
+                        autosomal_cov_length += float(sections[1])
+                        autosomal_cov_bases += float(sections[2])
+        
+        if autosomal_cov_length and autosomal_cov_bases:
+            coverage = autosomal_cov_bases / autosomal_cov_length
+        else:
+            coverage = 0.0
+        d['autosomal_coverage'] = float(coverage) 
 
 
     # Add to general stats table & calculate a nice % aligned
@@ -541,13 +540,15 @@ def general_stats_headers (self):
         'suffix': 'X',
         'scale': 'BuPu'
     }
-    self.general_stats_headers['autosomal_coverage'] = {
-        'title': 'Autosomal Coverage',
-        'description': 'Autosomal coverage',
-        'min': 0,
-        'suffix': 'X',
-        'scale': 'BuPu'
-    }
+
+    if 'valid_contigs' in config.qualimap_config:
+        self.general_stats_headers['autosomal_coverage'] = {
+            'title': 'Autosomal Coverage',
+            'description': 'Autosomal coverage',
+            'min': 0,
+            'suffix': 'X',
+            'scale': 'BuPu'
+        }
 
     self.general_stats_headers['percentage_aligned'] = {
         'title': '% Aligned',
